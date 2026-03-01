@@ -48,8 +48,12 @@ class FastLogger {
       }
 
       final now = DateTime.now();
-      final fileName =
-          'app_${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}.log';
+      final d = now.day.toString().padLeft(2, '0');
+      final m = now.month.toString().padLeft(2, '0');
+      final y = now.year;
+      final h = now.hour.toString().padLeft(2, '0');
+
+      final fileName = 'app_D${d}_${m}_${y}___H$h.log';
       _logFile = File('${logDir.path}/$fileName');
 
       if (await _logFile!.exists()) {
@@ -178,23 +182,3 @@ class FastLogger {
 }
 
 final lg = FastLogger();
-
-// EXAMPLES
-
-// lg.s(msg: 'SUCCESS: Usuario registrado');
-// lg.s(msg: 'SUCCESS: Usuario registrado', module: 'AUTH');
-// lg.d(msg: 'DEBUG: Variable x = 42');
-// lg.d(msg: 'DEBUG: Variable x = 42', module: 'AUTH');
-// lg.i(msg: 'INFO: App iniciada');
-// lg.i(msg: 'INFO: App iniciada', module: 'SYSTEM');
-// lg.w(msg: 'WARNING: API lenta');
-// lg.w(msg: 'WARNING: API lenta', module: 'API');
-
-// try {
-//   throw Exception('Error prueba');
-// } catch (e, s) {
-//   lg.e(msg: 'ERROR: Error de prueba', module: 'AUTH', stack: s);
-//   lg.e(msg: 'ERROR: Error de prueba', stack: s);
-//   lg.f(msg: 'FATAL: Error crítico', module: 'SYSTEM', stack: s);
-//   lg.f(msg: 'FATAL: Error crítico', stack: s);
-// }

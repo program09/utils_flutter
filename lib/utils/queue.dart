@@ -10,9 +10,13 @@ class Queue {
   // Cache de cajas abiertas para no abrir repetidamente
   static final Map<String, Box> _openBoxes = {};
 
-  static Future<void> init() async {
-    var path = await getApplicationDocumentsDirectory();
-    Hive.init(path.path);
+  static Future<void> init({String? path}) async {
+    if (path != null) {
+      Hive.init(path);
+    } else {
+      final dir = await getApplicationDocumentsDirectory();
+      Hive.init(dir.path);
+    }
   }
 
   // Abrir caja (privado - maneja cache)
@@ -27,7 +31,7 @@ class Queue {
   }
 
   // Crear cola (abrir es suficiente)
-  static Future<void> createQueue({required String queueName}) async {
+  static Future<void> create({required String queueName}) async {
     await _getQueue(queueName);
   }
 
@@ -37,7 +41,7 @@ class Queue {
   }
 
   // Cerrar caja específica
-  static Future<void> closeQueue(String queueName) async {
+  static Future<void> close({required String queueName}) async {
     if (_openBoxes.containsKey(queueName)) {
       await _openBoxes[queueName]!.close();
       _openBoxes.remove(queueName);
@@ -45,7 +49,7 @@ class Queue {
   }
 
   // Cerrar todas las cajas
-  static Future<void> closeAllQueues() async {
+  static Future<void> closeAll() async {
     for (var entry in _openBoxes.entries) {
       await entry.value.close();
     }
@@ -121,12 +125,12 @@ class Queue {
   static Future<T?> getAs<T>({
     required String queueName,
     required dynamic id,
-    required T Function(Map<String, dynamic>) fromJson,
+    required T Function(Map<String, dynamic>) format,
   }) async {
     final box = await _getQueue(queueName);
     final item = box.get(id);
     if (item == null) return null;
-    return fromJson(Map<String, dynamic>.from(item));
+    return format(Map<String, dynamic>.from(item));
   }
 
   // Eliminar por ID
@@ -149,16 +153,16 @@ class Queue {
   // Obtener todos como objetos T
   static Future<List<T>> getAllAs<T>({
     required String queueName,
-    required T Function(Map<String, dynamic>) fromJson,
+    required T Function(Map<String, dynamic>) format,
   }) async {
     final box = await _getQueue(queueName);
     return box.values
-        .map((item) => fromJson(Map<String, dynamic>.from(item)))
+        .map((item) => format(Map<String, dynamic>.from(item)))
         .toList();
   }
 
   // Limpiar cola
-  static Future<bool> clear({required String queueName}) async {
+  static Future<bool> clean({required String queueName}) async {
     final box = await _getQueue(queueName);
     await box.clear();
     return true;
@@ -195,5 +199,16 @@ class Queue {
     }
 
     return results;
+  }
+}
+
+// cja para guardar variables globales
+class Vars {
+  static const String queueName = 'vars';
+
+  // variables como apiUrl, databsename, databaseversion, etc
+
+  static Future<void> init() async {
+    await Queue.create(queueName: queueName);
   }
 }

@@ -1,15 +1,27 @@
+// lib/main.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:orm/home.dart';
 import 'package:orm/models/user.dart';
 import 'package:orm/utils/env.dart';
+import 'package:orm/utils/event_bridge.dart';
+import 'package:orm/utils/events.dart';
 import 'package:orm/utils/logs.dart';
 import 'package:orm/utils/permissions.dart';
 import 'package:orm/utils/queue.dart';
+import 'package:orm/utils/isolated.dart';
+import 'package:workmanager/workmanager.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Inicializar logger
+
+  // 1. WorkManager
+  await Workmanager().initialize(callbackDispatcher);
+
+  // 2. Inicializar logger
   await lg.init(saveToFile: true);
-  // Probar TODOS los niveles
+
+  // 3. Logs de prueba
   lg.s(msg: 'SUCCESS: Usuario registrado', module: 'AUTH');
   lg.d(msg: 'DEBUG: Variable x = 42', module: 'AUTH');
   lg.i(msg: 'INFO: App iniciada', module: 'SYSTEM');
@@ -22,34 +34,158 @@ void main() async {
     lg.f(msg: 'FATAL: Error crítico', module: 'SYSTEM', stack: s);
   }
 
+  // 4. Permisos
   await Perm.getStorage();
-  // await Perm.getCamera();
-  // await Perm.getLocation();
-  // await Perm.getPhotos();
-  // await Perm.getManageExternalStorage();
 
+  // 5. Variables de entorno
   await Env.load();
 
+  // 6. Queue
   await Queue.init();
 
-  loadData();
+  // 7. Cargar datos
+  await loadData();
+
+  // 8. INICIALIZAR LISTENER PARA EVENTOS DEL BACKGROUND (IsolateNameServer)
+  EventBridge.initMainListener();
 
   runApp(const MainApp());
 }
 
-class MainApp extends StatelessWidget {
+class MainApp extends StatefulWidget {
   const MainApp({super.key});
 
   @override
+  State<MainApp> createState() => _MainAppState();
+}
+
+class _MainAppState extends State<MainApp> {
+  // Para mostrar feedback en la UI
+  String _lastEvent = 'Esperando eventos...';
+  StreamSubscription? _bridgeSub;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Opcional: Escuchar de forma global para logs o feedback persistente
+    _bridgeSub = EventBridge.listener('syncCompleted', (data) {
+      lg.i(msg: 'Sincronización detectada en Root', module: 'MAIN');
+      // Si necesitas enviarlo a un stream global manual:
+      setState(() {
+        _lastEvent = '📬 ${data['event']}: ${data['data']?['message'] ?? ''}';
+      });
+
+      // Mostrar SnackBar usando el contexto del scaffold
+      _showSnackBar(context, data);
+    });
+  }
+
+  @override
+  void dispose() {
+    _bridgeSub?.cancel(); // Limpiar suscripción
+    EventBridge.dispose();
+    super.dispose();
+  }
+
+  void _showSnackBar(BuildContext context, Map eventData) {
+    final isError = eventData['event'] == 'syncError';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(eventData['data']?['message'] ?? 'Evento recibido'),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(body: Center(child: Text('Hello World!'))),
+    return MaterialApp(
+      title: 'Mi App',
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: HomePage(lastEvent: _lastEvent, onEvent: () => setState(() {})),
+      routes: {'/home': (context) => const HomeScreen()},
     );
   }
 }
 
-void loadData() async {
-  await Queue.createQueue(queueName: 'users');
+// Página principal
+class HomePage extends StatelessWidget {
+  final String lastEvent;
+  final VoidCallback onEvent;
+
+  const HomePage({super.key, required this.lastEvent, required this.onEvent});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Inicio')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Mostrar último evento
+            Container(
+              padding: const EdgeInsets.all(16),
+              color: Colors.blue.shade50,
+              child: Text(lastEvent, style: const TextStyle(fontSize: 16)),
+            ),
+            const SizedBox(height: 20),
+            const Text('Hello World!'),
+            const SizedBox(height: 100),
+
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pushNamed(context, '/home');
+                await Future.delayed(const Duration(seconds: 3));
+                Events.emit(
+                  'syncCompleted',
+                  data: {'message': 'Sincronización completada'},
+                );
+              },
+              child: const Text('Event to Home'),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () async {
+                // // Registrar tarea
+                await Workmanager().registerOneOffTask(
+                  "task-id",
+                  "simpleTask",
+                  inputData: User(id: 19999, name: 'Yordi', age: 25).toMap(),
+                );
+                lg.s(msg: '✅ Tarea registrada', module: 'UI');
+              },
+              child: const Text('Register Task workmanager'),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () async {
+                // Cancelar tarea
+                await Workmanager().cancelByUniqueName('task-id');
+                lg.s(msg: '🛑 Tarea cancelada', module: 'UI');
+
+                // Mostrar SnackBar con el contexto
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Tarea cancelada'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              child: const Text('Cancel Task'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Future<void> loadData() async {
+  await Queue.create(queueName: 'users');
 
   await Queue.push(
     queueName: 'users',
@@ -287,7 +423,7 @@ void loadData() async {
   // get all users as objects
   final allUsersAsObjects = await Queue.getAllAs<User>(
     queueName: 'users',
-    fromJson: User.fromMap,
+    format: User.fromMap,
   );
   lg.s(
     msg: 'All users as objects: ${allUsersAsObjects.toString()}',
@@ -303,7 +439,7 @@ void loadData() async {
     final userAsObject = await Queue.getAs<User>(
       queueName: 'users',
       id: 4467,
-      fromJson: User.fromMap,
+      format: User.fromMap,
     );
     lg.s(
       msg: 'User by id 4467 as object: ${userAsObject.toString()}',
@@ -370,12 +506,25 @@ void loadData() async {
     module: 'AUTH',
   );
 
-  // clear queue
-  await Queue.clear(queueName: 'users');
-  lg.s(
-    msg: 'All users: ${await Queue.getAll(queueName: 'users')}',
+  // clean queue
+  await Queue.clean(queueName: 'users');
+  lg.s(msg: 'Queue cleaned', module: 'AUTH');
+  lg.w(
+    msg: 'Length of users: ${await Queue.length(queueName: 'users')}',
     module: 'AUTH',
   );
+
+  // close queue
+  await Queue.close(queueName: 'users');
+  lg.s(msg: 'Queue closed', module: 'AUTH');
+  lg.w(
+    msg: 'Length of users: ${await Queue.length(queueName: 'users')}',
+    module: 'AUTH',
+  );
+
+  // close all queues
+  await Queue.closeAll();
+  lg.s(msg: 'All queues closed', module: 'AUTH');
   lg.w(
     msg: 'Length of users: ${await Queue.length(queueName: 'users')}',
     module: 'AUTH',
