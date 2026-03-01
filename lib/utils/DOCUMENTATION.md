@@ -292,6 +292,54 @@ Alerts.dark(context, 'Tarea registrada', title: 'Éxito');
 
 ---
 
+## 9. ORM Custom (Sqflite + SQLCipher)
+Sistema para manejar base de datos local cifrada sin escribir SQL manual.
+
+### Configuración del Modelo
+Cada modelo debe definir su estructura de tabla.
+
+```dart
+// lib/example/models/users.model.dart
+static orm.Table get table => orm.Table(
+      name: 'users',
+      columns: [
+        Column(name: 'id', type: ColumnType.integer, isPrimaryKey: true),
+        Column(name: 'name', type: ColumnType.text),
+        Column(name: 'age', type: ColumnType.integer),
+      ],
+    );
+```
+
+### Inicialización
+```dart
+void main() async {
+  final db = DbHelper();
+  db.setPassword('mi_clave_secreta_123'); // Obligatorio para SQLCipher
+  db.setTables([User.table, Sale.table]); // Registrar todas las tablas
+  
+  await db.db; // Inicializa la conexión
+}
+```
+
+### Uso del Repositorio
+```dart
+final userRepo = UserRepository();
+
+// Insertar
+await userRepo.insert(User(id: 1, name: 'Yordi', age: 25));
+
+// Obtener todos
+final users = await userRepo.getAll();
+
+// Obtener por ID
+final user = await userRepo.getById(1);
+
+// Eliminar
+await userRepo.delete(1);
+```
+
+---
+
 ### **Consejos de Rendimiento**
 1.  **Eventos**: Usa `Events.once` si solo necesitas esperar el evento una sola vez (se auto-cancela).
 2.  **Colas**: No guardes objetos pesados (imágenes en base64) en la cola; guarda la ruta del archivo.

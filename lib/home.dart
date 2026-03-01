@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:orm/example/models/users.model.dart';
+import 'package:orm/example/repository/user_repository.dart';
+import 'package:orm/utils/alerts.dart';
 import 'package:orm/utils/event_bridge.dart';
 import 'package:orm/utils/events.dart';
 
@@ -11,53 +14,134 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String _estado = 'Esperando...';
-  List<String> _logs = [];
+  final UserRepository _userRepo = UserRepository();
+  List<User> _users = [];
+  bool _isLoading = true;
 
-  // 1. Definir variables para las suscripciones
   StreamSubscription? _eventsSub;
   StreamSubscription? _bridgeSub;
 
   @override
   void initState() {
     super.initState();
+    _loadUsers();
 
-    // 2. Guardar las suscripciones
+    // Escuchar eventos internos
     _eventsSub = Events.listener('syncCompleted', (data) {
       if (!mounted) return;
-      setState(() {
-        _estado = '📬 ${data['message'] ?? 'Evento recibido'}';
-        _logs.insert(
-          0,
-          '${DateTime.now().toString().substring(11, 19)}: ${data['message']}',
-        );
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('✅ ${data['message']}'),
-          backgroundColor: Colors.green,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      _loadUsers();
+      Alerts.success(context, data['message'] ?? 'Sincronización lista');
     });
 
     // Escuchar eventos del background
     _bridgeSub = EventBridge.listener('syncCompleted', (data) {
       if (!mounted) return;
-      setState(() {
-        _estado = '📬 ${data['message'] ?? 'Evento recibido'}';
-        _logs.insert(
-          0,
-          '${DateTime.now().toString().substring(11, 19)}: ${data['message']}',
-        );
-      });
+      _loadUsers();
+      Alerts.info(context, 'Datos actualizados desde Background');
     });
+  }
+
+  Future<void> _loadUsers() async {
+    setState(() => _isLoading = true);
+    try {
+      final users = await _userRepo.getAll();
+      setState(() {
+        _users = users;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) Alerts.error(context, 'Error cargando usuarios: $e');
+    }
+  }
+
+  Future<void> _addOrUpdateUser({User? user}) async {
+    final isEditing = user != null;
+    final nameController = TextEditingController(text: user?.name);
+    final ageController = TextEditingController(text: user?.age.toString());
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(isEditing ? 'Editar Usuario' : 'Nuevo Usuario'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Nombre'),
+            ),
+            TextField(
+              controller: ageController,
+              decoration: const InputDecoration(labelText: 'Edad'),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancelar'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final name = nameController.text;
+              final age = int.tryParse(ageController.text) ?? 0;
+
+              if (name.isEmpty) return;
+
+              final newUser = User(
+                id: isEditing ? user.id : DateTime.now().millisecondsSinceEpoch,
+                name: name,
+                age: age,
+              );
+
+              if (isEditing) {
+                await _userRepo.update(newUser, id: user.id);
+                Alerts.success(context, 'Usuario actualizado');
+              } else {
+                await _userRepo.insert(newUser);
+                Alerts.success(context, 'Usuario creado');
+              }
+
+              if (mounted) Navigator.pop(context);
+              _loadUsers();
+            },
+            child: Text(isEditing ? 'Actualizar' : 'Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _deleteUser(User user) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar'),
+        content: Text('¿Borrar a ${user.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sí, borrar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _userRepo.delete(user.id);
+      Alerts.warning(context, 'Usuario eliminado');
+      _loadUsers();
+    }
   }
 
   @override
   void dispose() {
-    // 3. CANCELAR TODO AL CERRAR LA PANTALLA
     _eventsSub?.cancel();
     _bridgeSub?.cancel();
     super.dispose();
@@ -66,29 +150,43 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('EventBridge Demo')),
-      body: Column(
-        children: [
-          Container(
-            padding: EdgeInsets.all(16),
-            color: Colors.blue.shade50,
-            child: Text(
-              _estado,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-          ),
-          Expanded(
-            child: ListView.builder(
-              itemCount: _logs.length,
+      appBar: AppBar(
+        title: const Text('Usuarios ORM'),
+        actions: [
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadUsers),
+        ],
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _users.isEmpty
+          ? const Center(child: Text('No hay usuarios registrados.'))
+          : ListView.builder(
+              itemCount: _users.length,
               itemBuilder: (context, index) {
+                final user = _users[index];
                 return ListTile(
-                  leading: Icon(Icons.event, color: Colors.blue),
-                  title: Text(_logs[index]),
+                  leading: CircleAvatar(child: Text(user.age.toString())),
+                  title: Text(user.name),
+                  subtitle: Text('ID: ${user.id}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit, color: Colors.blue),
+                        onPressed: () => _addOrUpdateUser(user: user),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete, color: Colors.red),
+                        onPressed: () => _deleteUser(user),
+                      ),
+                    ],
+                  ),
                 );
               },
             ),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _addOrUpdateUser(),
+        child: const Icon(Icons.add),
       ),
     );
   }

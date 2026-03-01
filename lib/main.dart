@@ -2,7 +2,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:orm/home.dart';
-import 'package:orm/models/user.dart';
+import 'package:orm/example/models/users.model.dart';
+import 'package:orm/orm/database/db_helper.dart';
 import 'package:orm/utils/alerts.dart';
 import 'package:orm/utils/env.dart';
 import 'package:orm/utils/event_bridge.dart';
@@ -49,6 +50,12 @@ void main() async {
 
   // 8. INICIALIZAR LISTENER PARA EVENTOS DEL BACKGROUND (IsolateNameServer)
   EventBridge.initMainListener();
+
+  // 9. Inicializar base de datos ORM
+  final db = DbHelper();
+  db.setPassword('super_secret_password_123'); // Usar clave para SQLCipher
+  db.setTables([User.table]); // Registrar tabla de usuarios
+  await db.db; // Abrir conexión inicial
 
   runApp(const MainApp());
 }
