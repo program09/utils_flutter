@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:orm/home.dart';
 import 'package:orm/models/user.dart';
+import 'package:orm/utils/alerts.dart';
 import 'package:orm/utils/env.dart';
 import 'package:orm/utils/event_bridge.dart';
 import 'package:orm/utils/events.dart';
@@ -149,12 +150,14 @@ class HomePage extends StatelessWidget {
             const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () async {
+                Alerts.dark(context, 'Tarea registrada', title: 'Éxito');
                 // // Registrar tarea
-                await Workmanager().registerOneOffTask(
+                Workmanager().registerOneOffTask(
                   "task-id",
                   "simpleTask",
                   inputData: User(id: 19999, name: 'Yordi', age: 25).toMap(),
                 );
+
                 lg.s(msg: '✅ Tarea registrada', module: 'UI');
               },
               child: const Text('Register Task workmanager'),

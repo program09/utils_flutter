@@ -260,7 +260,40 @@ bool hasLocation = await Perm.getLocation();
 
 ---
 
+## 8. Sistema de Alertas (`alerts.dart`)
+Utilidad para mostrar notificaciones visuales (SnackBars) con estilos y colores premium según el tipo de mensaje.
+
+### Tipos de Alerta
+*   **Success**: Verde - Para confirmaciones de acciones exitosas.
+*   **Error**: Rojo - Para fallos o errores de validación.
+*   **Warning**: Naranja - Para advertencias que requieren atención.
+*   **Info**: Azul - Para información general o ayuda.
+
+### Uso
+```dart
+import 'package:orm/utils/alerts.dart';
+
+// --- Uso General ---
+Alerts.show(
+  context,
+  title: '¡Éxito!',
+  message: 'Los datos se sincronizaron.',
+  type: AlertType.success,
+  duration: Duration(seconds: 4),
+);
+
+// --- Métodos Rápidos ---
+Alerts.success(context, 'Guardado correctamente');
+Alerts.error(context, 'No se pudo conectar al servidor', title: 'Error de Red');
+Alerts.warning(context, 'La batería está baja');
+Alerts.info(context, 'Nueva actualización disponible');
+Alerts.dark(context, 'Tarea registrada', title: 'Éxito');
+```
+
+---
+
 ### **Consejos de Rendimiento**
 1.  **Eventos**: Usa `Events.once` si solo necesitas esperar el evento una sola vez (se auto-cancela).
 2.  **Colas**: No guardes objetos pesados (imágenes en base64) en la cola; guarda la ruta del archivo.
 3.  **Logs**: En producción, inicializa `lg.init(saveToFile: false)` para no llenar el disco del usuario innecesariamente.
+4.  **Alertas**: No satures al usuario con demasiados SnackBars; úsalos solo para feedback relevante.
