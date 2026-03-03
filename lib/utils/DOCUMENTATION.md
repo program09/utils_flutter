@@ -338,10 +338,99 @@ final user = await userRepo.getById(1);
 await userRepo.delete(1);
 ```
 
+### Fluent Query Builder (Avanzado)
+Permite construir consultas complejas de forma encadenada.
+
+```dart
+final userRepo = UserRepository();
+
+// 1. SELECT con filtros complejos
+final adults = await userRepo.createBuilder()
+    .select(['name', 'age'])
+    .where('age >= ?', [18])
+    .andWhere('status = ?', ['active'])
+    .orderBy('name', order: 'DESC')
+    .limit(10)
+    .toList();
+
+// 2. UPDATE masivo
+await userRepo.createBuilder()
+    .update()
+    .set({'status': 'inactive'})
+    .where('last_login < ?', ['2023-01-01'])
+    .execute();
+
+// 3. DELETE con condiciones
+await userRepo.createBuilder()
+    .delete()
+    .where('age < ?', [13])
+    .execute();
+
+// 4. JOINS y Agrupación
+final stats = await userRepo.createBuilder()
+    .select(['department', 'COUNT(*) as total'])
+    .join('departments', 'users.dept_id = departments.id')
+    .groupBy('department')
+    .toList();
+```
+
+### Relaciones (Foreign Keys)
+Para definir relaciones entre tablas, usa los campos `isForeignKey`, `referenceTable` y `referenceColumn`.
+
+```dart
+// Ejemplo en Product model
+Column(
+  name: 'category_id',
+  type: ColumnType.integer,
+  isForeignKey: true,
+  referenceTable: 'categories',
+  referenceColumn: 'id',
+),
+```
+
+Puedes consultar datos relacionados usando el Query Builder:
+```dart
+final products = await productRepo.createBuilder()
+    .where('category_id = ?', [selectedId])
+    .toList();
+```
+
+### Relaciones Many-to-Many (N:N)
+Para implementar relaciones de muchos a muchos, se utiliza una **tabla intermedia** (join table).
+
+**Ejemplo: Usuarios y Roles**
+1. **Modelos**: `User`, `Role` y `UserRole` (tabla intermedia con llaves foráneas a ambas).
+2. **Repositorio**: Usa consultas `JOIN` para obtener los datos relacionados.
+
+```dart
+// Obtener roles de un usuario
+Future<List<Role>> getRolesByUser(int userId) async {
+  final List<Map<String, dynamic>> maps = await client.rawQuery('''
+    SELECT r.* FROM roles r
+    INNER JOIN user_roles ur ON r.id = ur.role_id
+    WHERE ur.user_id = ?
+  ''', [userId]);
+  return maps.map((m) => Role.fromMap(m)).toList();
+}
+```
+
 ---
+
+### **Migraciones de Base de Datos**
+Si añades nuevas tablas o columnas, recuerda:
+1. **Incrementar la versión** en `DbHelper`.
+2. El sistema ejecutará `onUpgrade`, donde puedes llamar a `_createTables(db)` para asegurar que las nuevas estructuras se creen sin afectar los datos existentes (usando `IF NOT EXISTS`).
 
 ### **Consejos de Rendimiento**
 1.  **Eventos**: Usa `Events.once` si solo necesitas esperar el evento una sola vez (se auto-cancela).
 2.  **Colas**: No guardes objetos pesados (imágenes en base64) en la cola; guarda la ruta del archivo.
 3.  **Logs**: En producción, inicializa `lg.init(saveToFile: false)` para no llenar el disco del usuario innecesariamente.
 4.  **Alertas**: No satures al usuario con demasiados SnackBars; úsalos solo para feedback relevante.
+
+---
+
+### **Ejemplo Maestro Integral**
+Para ver cómo todos estos componentes funcionan juntos en una aplicación real, revisa el archivo:
+👉 **[complete_example.dart](file:///c:/Users/yordi/Develop/projects/plugins/orm/lib/example/complete_example.dart)**
+
+Este archivo contiene la integración completa de ORM, Background Tasks, Eventos y Colas en una sola pantalla.

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:orm/example/models/users.model.dart';
 import 'package:orm/example/repository/user_repository.dart';
+import 'package:orm/example/repository/role_repository.dart';
 import 'package:orm/utils/alerts.dart';
 import 'package:orm/utils/event_bridge.dart';
 import 'package:orm/utils/events.dart';
@@ -114,6 +115,63 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<void> _manageRoles(User user) async {
+    final roleRepo = RoleRepository();
+    final allRoles = await roleRepo.getAll();
+    final userRoles = await roleRepo.getRolesByUser(user.id);
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Roles de ${user.name}'),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: allRoles.length,
+                  itemBuilder: (context, index) {
+                    final role = allRoles[index];
+                    final isAssigned = userRoles.any((r) => r.id == role.id);
+
+                    return CheckboxListTile(
+                      title: Text(role.name),
+                      value: isAssigned,
+                      onChanged: (val) async {
+                        if (val == true) {
+                          await roleRepo.assignToUser(user.id, role.id!);
+                        } else {
+                          await roleRepo.removeFromUser(user.id, role.id!);
+                        }
+
+                        // Recargar roles del usuario
+                        final updated = await roleRepo.getRolesByUser(user.id);
+                        setDialogState(() {
+                          userRoles.clear();
+                          userRoles.addAll(updated);
+                        });
+                      },
+                    );
+                  },
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cerrar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _deleteUser(User user) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -171,6 +229,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      IconButton(
+                        icon: const Icon(Icons.security, color: Colors.purple),
+                        onPressed: () => _manageRoles(user),
+                        tooltip: 'Asignar Roles',
+                      ),
                       IconButton(
                         icon: const Icon(Icons.edit, color: Colors.blue),
                         onPressed: () => _addOrUpdateUser(user: user),

@@ -2,8 +2,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:orm/home.dart';
+import 'package:orm/example/controllers/database_helper.dart';
+import 'package:orm/example/complete_example.dart';
 import 'package:orm/example/models/users.model.dart';
-import 'package:orm/orm/database/db_helper.dart';
+import 'package:orm/example/screens/category_list_screen.dart';
+import 'package:orm/example/screens/role_list_screen.dart';
 import 'package:orm/utils/alerts.dart';
 import 'package:orm/utils/env.dart';
 import 'package:orm/utils/event_bridge.dart';
@@ -51,11 +54,8 @@ void main() async {
   // 8. INICIALIZAR LISTENER PARA EVENTOS DEL BACKGROUND (IsolateNameServer)
   EventBridge.initMainListener();
 
-  // 9. Inicializar base de datos ORM
-  final db = DbHelper();
-  db.setPassword('super_secret_password_123'); // Usar clave para SQLCipher
-  db.setTables([User.table]); // Registrar tabla de usuarios
-  await db.db; // Abrir conexión inicial
+  // 9. Inicializar base de datos ORM de Ejemplo
+  await ExampleDatabase.init();
 
   runApp(const MainApp());
 }
@@ -113,7 +113,12 @@ class _MainAppState extends State<MainApp> {
       title: 'Mi App',
       theme: ThemeData(primarySwatch: Colors.blue),
       home: HomePage(lastEvent: _lastEvent, onEvent: () => setState(() {})),
-      routes: {'/home': (context) => const HomeScreen()},
+      routes: {
+        '/home': (context) => const HomeScreen(),
+        '/categories': (context) => const CategoryListScreen(),
+        '/master': (context) => const MasterExampleScreen(),
+        '/roles': (context) => const RoleListScreen(),
+      },
     );
   }
 }
@@ -143,6 +148,15 @@ class HomePage extends StatelessWidget {
             const Text('Hello World!'),
             const SizedBox(height: 100),
 
+            ElevatedButton(
+              onPressed: () => Navigator.pushNamed(context, '/master'),
+
+              child: const Text(
+                'FULL APP FLOW (Master)',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+            const SizedBox(height: 10),
             ElevatedButton(
               onPressed: () async {
                 Navigator.pushNamed(context, '/home');
